@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Muscle Run: Urban Thriller</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <style>
+        body { margin: 0; background: #050505; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        #game-ui { position: absolute; top: 10px; left: 10px; color: #00ffcc; z-index: 10; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="game-ui">
+        <div id="score">RUPEES: 0</div>
+        <div id="distance">DIST: 0m</div>
+        <div id="status" style="color: #ff00ff; font-weight: bold;">BODY: NORMAL</div>
+    </div>
+
+<script>
+const config = {
+    type: Phaser.AUTO,
+    width: 400,
+    height: 700,
+    backgroundColor: '#0a0a0a',
+    physics: { default: 'arcade', arcade: { debug: false } },
+    scene: { preload: preload, create: create, update: update }
+};
+
+let player, monster, road, obstacles, items, coins;
+let cursors, score = 0, dist = 0, muscleScale = 1;
+let lanes = [80, 200, 320];
+let currentLane = 1;
+let isGameOver = false;
+let isStumbling = false;
+let gameSpeed = 5;
+
+const game = new Phaser.Game(config);
+
+function preload() {
+    // प्रोफेशनल ग्राफिक्स के लिए प्लेसहोल्डर्स
+    this.load.image('road', 'https://labs.phaser.io/assets/skies/big-astronomy.jpg'); // Dark City Background
+}
+
+function create() {
+    // 1. Background (Moving Road)
+    road = this.add.tileSprite(200, 350, 400, 700, 'road').setAlpha(0.4).setTint(0x333333);
+
+    // 2. The Player (Bodybuilder with Long Hair representation)
+    // हमने इसे एक Container बनाया है ताकि मसल्स बढ़ा सकें
+    player = this.add.container(lanes[currentLane], 550);
+    let body = this.add.rectangle(0, 0, 40, 70, 0x00ffaa).setStrokeStyle(2, 0xffffff);
+    let hair = this.add.rectangle(0, -35, 30, 40, 0x331100); // Long Hair
+    player.add([body, hair]);
+    this.physics.add.existing(player);
+
+    // 3. Junk Food Monster (The Chaser)
+    monster = this.add.rectangle(lanes[currentLane], 680, 100, 120, 0xff3300).setAlpha(0.7);
+    this.add.text(monster.x - 40, monster.y - 10, "JUNK FOOD", {fontSize: '12px', fill: '#fff'});
+
+    // 4. Mobile Controls (Swipe)
+    this.input.on('pointerdown', (pointer) => {
+        if (isGameOver) location.reload();
+        if (pointer.x < 150 && currentLane > 0) currentLane--;
+        else if (pointer.x > 250 && currentLane < 2) currentLane++;
+    });
+
+    // 5. Groups
+    obstacles = this.physics.add.group();
+    items = this.physics.add.group();
+    coins = this.physics.add.group();
+
+    // 6. Spawning
+    this.time.addEvent({ delay: 1200, callback: spawnObstacle, callbackScope: this, loop: true });
+    this.time.addEvent({ delay: 2500, callback: spawnItems, callbackScope: this, loop: true });
+
+    // Collisions
+    this.physics.add.overlap(player, obstacles, handleCollision, null, this);
+    this.physics.add.overlap(player, items, collectProtein, null, this);
+    this.physics.add.overlap(player, coins, collectCoin, null, this);
+}
+
+function update() {
+    if (isGameOver) return;
+
+    // Road movement
+    road.tilePositionY -= gameSpeed;
+    dist += 0.1;
+    document.getElementById('distance').innerText = "DIST: " + Math.floor(dist) + "m";
+
+    // Player Lane Movement
+    player.x = Phaser.Math.Linear(player.x, lanes[currentLane], 0.2);
+    
+    // Monster Follow Logic
+    monster.x = Phaser.Math.Linear(monster.x, player.x, 0.05);
+    if (isStumbling) {
+        monster.y = Phaser.Math.Linear(monster.y, 600, 0.1); // राक्षस करीब आएगा
+    } else {
+        monster.y = Phaser.Math.Linear(monster.y, 680, 0.02); // राक्षस दूर रहेगा
+    }
+
+    // Cleanup
+    obstacles.children.iterate(child => { if (child && child.y > 750) child.destroy(); });
+}
+
+function spawnObstacle() {
+    let lane = Phaser.Math.RND.pick(lanes);
+    let car = this.add.rectangle(lane, -50, 60, 90, 0x555555).setStrokeStyle(2, 0xff0000);
+    obstacles.add(car);
+    car.body.setVelocityY(gameSpeed * 60);
+}
+
+function spawnItems() {
+    let lane = Phaser.Math.RND.pick(lanes);
+    let type = Phaser.Math.RND.between(0, 1);
+    if (type === 0) {
+        let p = this.add.circle(lane, -50, 15, 0x00ffff); // Protein Shake
+        items.add(p);
+        p.body.setVelocityY(gameSpeed * 60);
+    } else {
+        let c = this.add.circle(lane, -50, 10, 0xffcc00); // Coin
+        coins.add(c);
+        c.body.setVelocityY(gameSpeed * 60);
+    }
+}
+
+function collectProtein(p, item) {
+    item.destroy();
+    muscleScale += 0.1;
+    player.setScale(muscleScale, 1); // प्लेयर चौड़ा होगा
+    document.getElementById('status').innerText = "BODY: BUFFED UP!";
+    gameSpeed += 0.2; // स्पीड बढ़ेगी
+}
+
+function collectCoin(p, coin) {
+    coin.destroy();
+    score += 50;
+    document.getElementById('score').innerText = "RUPEES: " + score;
+}
+
+function handleCollision() {
+    if (isStumbling) {
+        // SECOND HIT - GAME OVER
+        isGameOver = true;
+        player.setScale(0.4, 1.2); // Skinny look
+        document.getElementById('status').innerText = "BODY: WASTED (SKINNY)";
+        this.add.text(50, 300, "GAME OVER\nTAP TO RESTART", { fontSize: '40px', fill: '#ff0000', align: 'center' });
+    } else {
+        // FIRST HIT - STUMBLE
+        isStumbling = true;
+        player.setAlpha(0.5);
+        this.time.delayedCall(3000, () => { 
+            isStumbling = false; 
+            player.setAlpha(1);
+        });
+    }
+}
+</script>
+</body>
+</html>
